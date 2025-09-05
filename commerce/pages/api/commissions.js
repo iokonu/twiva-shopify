@@ -21,7 +21,12 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Invalid type' });
     } catch (error) {
       console.error('Set commission error:', error);
-      return res.status(500).json({ error: 'Failed to set commission' });
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        requestBody: req.body
+      });
+      return res.status(500).json({ error: 'Failed to set commission', details: error.message });
     }
   }
 

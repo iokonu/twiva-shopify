@@ -52,35 +52,10 @@ export default async function handler(req, res) {
 
     const products = response.body.data.products.edges.map(edge => edge.node);
     
-    // Save products to database and enrich with commission data
+    // Only enrich with commission data, don't save all products to database
     const enrichedProducts = await Promise.all(
       products.map(async (product) => {
-        // Create public product link for customers/affiliates
         const productLink = `https://${shopRecord.domain}/products/${product.handle}`;
-        
-        // Save/update product in database
-        await prisma.product.upsert({
-          where: {
-            shopId_id: {
-              shopId: shop,
-              id: product.id
-            }
-          },
-          update: {
-            title: product.title,
-            handle: product.handle,
-            link: productLink,
-            updatedAt: new Date()
-          },
-          create: {
-            id: product.id,
-            shopId: shop,
-            title: product.title,
-            handle: product.handle,
-            link: productLink
-          }
-        });
-
         const collectionIds = product.collections.edges.map(edge => edge.node.id);
         const commissionData = await getProductCommission(shop, product.id, collectionIds);
         

@@ -14,35 +14,26 @@ model Shop {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  products              Product[]
   productCommissions    ProductCommission[]
   collectionCommissions CollectionCommission[]
 
   @@map("shops")
 }
 
-model Product {
-  id        String   @id
-  shopId    String
-  title     String
-  handle    String
-  link      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
-
-  @@unique([shopId, id])
-  @@map("products")
-}
-
 model ProductCommission {
-  id         String   @id @default(uuid())
-  shopId     String
-  productId  String
-  commission Float
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id            String   @id @default(uuid())
+  shopId        String
+  productId     String
+  
+  // Product details (stored here to avoid separate table)
+  productTitle  String
+  productHandle String
+  productLink   String
+  
+  // Commission data
+  commission    Float
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
@@ -51,12 +42,18 @@ model ProductCommission {
 }
 
 model CollectionCommission {
-  id           String   @id @default(uuid())
-  shopId       String
-  collectionId String
-  commission   Float
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(uuid())
+  shopId          String
+  collectionId    String
+  
+  // Collection details (stored here to avoid separate table)
+  collectionTitle String
+  collectionHandle String?
+  
+  // Commission data
+  commission      Float
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
