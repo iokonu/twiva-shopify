@@ -7,6 +7,7 @@ export const PRODUCTS_QUERY = `
           title
           handle
           status
+          productType
           description
           descriptionHtml
           featuredImage {
@@ -60,7 +61,9 @@ export const COLLECTIONS_QUERY = `
           title
           handle
           description
-          productsCount
+          productsCount {
+            count
+          }
           image {
             url
             altText

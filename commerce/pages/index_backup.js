@@ -5,7 +5,6 @@ import { useAppBridge } from '@shopify/app-bridge-react';
 import { Redirect } from '@shopify/app-bridge/actions';
 import { ProductTable } from '../components/ProductTable';
 import { CategoryCommissionForm } from '../components/CategoryCommissionForm';
-import { ProductCategoryForm } from '../components/ProductCategoryForm';
 import { CommissionsOverview } from '../components/CommissionsOverview';
 
 export default function Home() {
@@ -13,7 +12,6 @@ export default function Home() {
   const app = useAppBridge();
   const [selectedTab, setSelectedTab] = useState(0);
   const [products, setProducts] = useState([]);
-  const [collections, setCollections] = useState([]);
   const [categories, setCategories] = useState([]);
   const [commissions, setCommissions] = useState([]);
   const [stats, setStats] = useState({});
@@ -25,7 +23,6 @@ export default function Home() {
   
   const { shop, host } = router.query;
 
-  // Debounce search term
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
@@ -37,7 +34,6 @@ export default function Home() {
   useEffect(() => {
     if (!shop) return;
     
-    // Check if we need authentication
     checkAuthAndLoadData();
   }, [shop, selectedTab, debouncedSearchTerm]);
 
@@ -61,31 +57,6 @@ export default function Home() {
       const searchParam = debouncedSearchTerm ? `&search=${encodeURIComponent(debouncedSearchTerm)}` : '';
       
       if (selectedTab === 0) {
-        // Load overview/stats
-        const response = await fetch(`/api/commissions/overview?shop=${shop}`);
-        if (response.status === 401) {
-          try {
-            const authResponse = await fetch(`/api/auth?shop=${shop}&host=${host}`, {
-              headers: { 'Accept': 'application/json' }
-            });
-            const { authUrl } = await authResponse.json();
-            
-            const redirect = Redirect.create(app);
-            redirect.dispatch(Redirect.Action.REMOTE, authUrl);
-            return;
-          } catch (authError) {
-            console.error('Auth redirect error:', authError);
-            setError('Authentication required. Please reload the app.');
-          }
-          return;
-        }
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to load overview');
-        }
-        const data = await response.json();
-        setStats(data);
-      } else if (selectedTab === 1) {
         const response = await fetch(`/api/products?shop=${shop}${searchParam}`);
         if (response.status === 401) {
           try {
@@ -109,7 +80,7 @@ export default function Home() {
         }
         const data = await response.json();
         setProducts(data.products);
-      } else if (selectedTab === 2) {
+      } else if (selectedTab === 1) {
         const response = await fetch(`/api/collections?shop=${shop}${searchParam}`);
         if (response.status === 401) {
           try {
@@ -133,31 +104,7 @@ export default function Home() {
         }
         const data = await response.json();
         setCollections(data.collections);
-      } else if (selectedTab === 3) {
-        const response = await fetch(`/api/categories?shop=${shop}${searchParam}`);
-        if (response.status === 401) {
-          try {
-            const authResponse = await fetch(`/api/auth?shop=${shop}&host=${host}`, {
-              headers: { 'Accept': 'application/json' }
-            });
-            const { authUrl } = await authResponse.json();
-            
-            const redirect = Redirect.create(app);
-            redirect.dispatch(Redirect.Action.REMOTE, authUrl);
-            return;
-          } catch (authError) {
-            console.error('Auth redirect error:', authError);
-            setError('Authentication required. Please reload the app.');
-          }
-          return;
-        }
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to load categories');
-        }
-        const data = await response.json();
-        setCategories(data.categories);
-      } else if (selectedTab === 4) {
+      } else if (selectedTab === 2) {
         const response = await fetch(`/api/commissions/list?shop=${shop}`);
         if (response.status === 401) {
           try {
@@ -205,17 +152,12 @@ export default function Home() {
     }
   };
 
-  const handleSaveCategoryCommission = async (categoryId, commission, applyToProducts = false, type = 'collection') => {
+  const handleSaveCategoryCommission = async (categoryId, commission, applyToProducts = false) => {
     try {
       const response = await fetch(`/api/commissions?shop=${shop}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          type: type === 'category' ? 'category' : 'collection', 
-          id: categoryId, 
-          commission, 
-          applyToProducts 
-        }),
+        body: JSON.stringify({ type: 'collection', id: categoryId, commission, applyToProducts }),
       });
       
       if (!response.ok) throw new Error('Failed to save commission');
@@ -245,7 +187,6 @@ export default function Home() {
   const tabs = [
     { id: 'overview', content: 'Overview', panelID: 'overview-panel' },
     { id: 'products', content: 'Products', panelID: 'products-panel' },
-    { id: 'collections', content: 'Collections', panelID: 'collections-panel' },
     { id: 'categories', content: 'Categories', panelID: 'categories-panel' },
     { id: 'commissions', content: 'Commissions', panelID: 'commissions-panel' },
   ];
@@ -280,17 +221,13 @@ export default function Home() {
           <Card>
             <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
               <div style={{ padding: '16px' }}>
-                {(selectedTab === 1 || selectedTab === 2 || selectedTab === 3) && (
+                {(selectedTab === 0 || selectedTab === 1) && (
                   <BlockStack gap="400">
                     <TextField
                       label="Search"
                       value={searchTerm}
                       onChange={setSearchTerm}
-                      placeholder={
-                        selectedTab === 1 ? 'Search products...' : 
-                        selectedTab === 2 ? 'Search collections...' : 
-                        'Search categories...'
-                      }
+                      placeholder={selectedTab === 0 ? 'Search products...' : 'Search collections...'}
                       clearButton
                       onClearButtonClick={() => setSearchTerm('')}
                     />
@@ -303,48 +240,30 @@ export default function Home() {
                   </div>
                 ) : (
                   <BlockStack gap="400">
-                    {selectedTab === 0 && (
-                      <CommissionsOverview
-                        stats={stats}
-                        onRefresh={loadData}
-                      />
-                    )}
-                    
-                    {selectedTab === 1 && (
-                      <ProductTable
-                        products={products}
-                        onProductSelect={setSelectedProduct}
-                        onSave={handleSaveProductCommission}
-                        onRemove={handleRemoveCommission}
-                        selectedProduct={selectedProduct}
-                      />
-                    )}
-                    
-                    {selectedTab === 2 &&
-                      collections.map((collection) => (
-                        <CategoryCommissionForm
-                          key={collection.id}
-                          category={collection}
-                          onSave={handleSaveCategoryCommission}
+                    {selectedTab === 0 &&
+                      products.map((product) => (
+                        <ProductCommissionForm
+                          key={product.id}
+                          product={product}
+                          onSave={handleSaveProductCommission}
                           onRemove={handleRemoveCommission}
                         />
                       ))}
-
-                    {selectedTab === 3 &&
-                      categories.map((category) => (
-                        <ProductCategoryForm
-                          key={category.name}
-                          category={category}
-                          onSave={handleSaveCategoryCommission}
+                    
+                    {selectedTab === 1 &&
+                      collections.map((collection) => (
+                        <CollectionCommissionForm
+                          key={collection.id}
+                          collection={collection}
+                          onSave={handleSaveCollectionCommission}
+                          onRemove={handleRemoveCommission}
                         />
                       ))}
                       
-                    {selectedTab === 4 && (
-                      <CommissionsOverview
-                        stats={stats}
+                    {selectedTab === 2 && (
+                      <CommissionsView
                         commissions={commissions}
-                        onRefresh={loadData}
-                        showTable={true}
+                        onUpdate={loadData}
                       />
                     )}
                   </BlockStack>
