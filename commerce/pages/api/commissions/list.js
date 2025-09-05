@@ -82,7 +82,9 @@ export default async function handler(req, res) {
             ... on Collection {
               id
               title
-              productsCount
+              productsCount {
+                count
+              }
             }
           }
         }
@@ -121,7 +123,7 @@ export default async function handler(req, res) {
           commission: commission.commission,
           collectionId: commission.collectionId,
           collectionTitle: collection?.title || 'Unknown Collection',
-          productsCount: collection?.productsCount || 0,
+          productsCount: collection?.productsCount?.count || 0,
           createdAt: commission.createdAt,
           updatedAt: commission.updatedAt
         };

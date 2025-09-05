@@ -48,38 +48,56 @@ export default async function handler(req, res) {
     let totalPotentialEarnings = 0;
     let totalCommissions = productCommissions.length + collectionCommissions.length;
     let allCommissionRates = [];
+    let productsWithCommissions = 0;
+    let totalProducts = 0;
 
-    // Calculate potential earnings from product commissions
-    if (productCommissions.length > 0) {
-      const productIds = productCommissions.map(c => c.productId);
-      const productQuery = `
-        query getProductsByIds($ids: [ID!]!) {
-          nodes(ids: $ids) {
-            ... on Product {
-              id
-              priceRangeV2 {
-                minVariantPrice {
-                  amount
-                  currencyCode
-                }
+    // Get all products to calculate total count and products without commissions
+    const allProductsQuery = `
+      query getAllProducts($first: Int!, $after: String) {
+        products(first: $first, after: $after) {
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+          nodes {
+            id
+            priceRangeV2 {
+              minVariantPrice {
+                amount
+                currencyCode
               }
             }
           }
         }
-      `;
+      }
+    `;
 
-      try {
+    let allProducts = [];
+    let hasNextPage = true;
+    let cursor = null;
+
+    // Fetch all products with pagination
+    try {
+      while (hasNextPage) {
         const productResponse = await client.query({
           data: {
-            query: productQuery,
-            variables: { ids: productIds }
+            query: allProductsQuery,
+            variables: { first: 250, after: cursor }
           }
         });
 
-        const products = productResponse.body.data.nodes.filter(node => node);
-        
+        const data = productResponse.body.data;
+        allProducts = allProducts.concat(data.products.nodes);
+        hasNextPage = data.products.pageInfo.hasNextPage;
+        cursor = data.products.pageInfo.endCursor;
+      }
+
+      totalProducts = allProducts.length;
+
+      // Calculate potential earnings from product commissions
+      if (productCommissions.length > 0) {
         productCommissions.forEach(commission => {
-          const product = products.find(p => p.id === commission.productId);
+          const product = allProducts.find(p => p.id === commission.productId);
           if (product && product.priceRangeV2) {
             const price = parseFloat(product.priceRangeV2.minVariantPrice.amount);
             const commissionAmount = (price * commission.commission) / 100;
@@ -87,9 +105,11 @@ export default async function handler(req, res) {
           }
           allCommissionRates.push(commission.commission);
         });
-      } catch (error) {
-        console.error('Error fetching product data:', error);
+        
+        productsWithCommissions = productCommissions.length;
       }
+    } catch (error) {
+      console.error('Error fetching product data:', error);
     }
 
     // Add collection commission rates to average calculation
@@ -115,9 +135,12 @@ export default async function handler(req, res) {
       };
     }
 
+    const productsWithoutCommissions = totalProducts - productsWithCommissions;
+
     const stats = {
       totalCommissions,
       productCommissions: productCommissions.length,
+      productsWithoutCommissions,
       collectionCommissions: collectionCommissions.length,
       totalPotentialEarnings,
       averageCommission,

@@ -14,10 +14,26 @@ model Shop {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  products              Product[]
   productCommissions    ProductCommission[]
   collectionCommissions CollectionCommission[]
 
   @@map("shops")
+}
+
+model Product {
+  id        String   @id
+  shopId    String
+  title     String
+  handle    String
+  link      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, id])
+  @@map("products")
 }
 
 model ProductCommission {

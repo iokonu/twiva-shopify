@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { Card, FormLayout, TextField, Button, BlockStack, InlineStack, Badge, Text, Thumbnail, Checkbox } from '@shopify/polaris';
+import { Card, FormLayout, TextField, Button, BlockStack, InlineStack, Badge, Text, Thumbnail } from '@shopify/polaris';
 
 export function CategoryCommissionForm({ category, onSave, onRemove }) {
   const [commission, setCommission] = useState(
     category.commission?.commission?.toString() || ''
   );
-  const [applyToProducts, setApplyToProducts] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSave = async () => {
@@ -13,8 +12,7 @@ export function CategoryCommissionForm({ category, onSave, onRemove }) {
     
     setLoading(true);
     try {
-      await onSave(category.id, parseFloat(commission), applyToProducts);
-      setApplyToProducts(false);
+      await onSave(category.id, parseFloat(commission), true);
     } finally {
       setLoading(false);
     }
@@ -71,13 +69,6 @@ export function CategoryCommissionForm({ category, onSave, onRemove }) {
               helpText="This commission will apply to all products in this collection"
             />
             
-            <Checkbox
-              label="Apply to all existing products in this collection"
-              checked={applyToProducts}
-              onChange={setApplyToProducts}
-              helpText={`This will set ${commission || 'X'}% commission on all ${category.productsCount} products in this collection, overriding any existing product-specific commissions.`}
-            />
-            
             <InlineStack gap="200">
               <Button
                 variant="primary"
@@ -85,7 +76,7 @@ export function CategoryCommissionForm({ category, onSave, onRemove }) {
                 loading={loading}
                 disabled={!commission || isNaN(commission)}
               >
-                {applyToProducts ? `Apply to Collection + ${category.productsCount} Products` : 'Set Collection Commission'}
+                Apply to Collection + {category.productsCount} Products
               </Button>
               
               {category.commission && (
@@ -103,16 +94,11 @@ export function CategoryCommissionForm({ category, onSave, onRemove }) {
               <div style={{ marginTop: '16px', padding: '16px', backgroundColor: '#f6f6f7', borderRadius: '8px' }}>
                 <Text variant="headingXs" as="h4">Bulk Action Preview</Text>
                 <Text as="p" tone="subdued">
-                  {applyToProducts 
-                    ? `This will apply ${commission}% commission to all ${category.productsCount} products in this collection.`
-                    : `New products added to this collection will inherit the ${commission}% commission rate.`
-                  }
+                  This will apply {commission}% commission to all {category.productsCount} products in this collection.
                 </Text>
-                {applyToProducts && (
-                  <Text as="p" tone="warning">
-                    ⚠️ This will override any existing product-specific commissions in this collection.
-                  </Text>
-                )}
+                <Text as="p" tone="warning">
+                  ⚠️ This will override any existing product-specific commissions in this collection.
+                </Text>
               </div>
             )}
           </FormLayout>

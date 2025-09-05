@@ -37,68 +37,85 @@ export function CommissionsOverview({ stats, commissions, onRefresh, showTable =
 
   return (
     <div>
-      {/* Stats Overview */}
-      <Card>
-        <div style={{ padding: '16px' }}>
-          <InlineStack align="space-between" blockAlign="center">
-            <Text variant="headingMd" as="h3">
-              Commission Overview
-            </Text>
-            <Button onClick={onRefresh}>Refresh</Button>
-          </InlineStack>
-          
-          <div style={{ marginTop: '16px' }}>
-            <Grid>
-              <Grid.Cell columnSpan={{xs: 6, sm: 3, md: 3, lg: 3, xl: 3}}>
-                <StatCard
-                  title="Total Commissions"
-                  value={stats.totalCommissions || 0}
-                  subtitle="Active commission rules"
-                />
-              </Grid.Cell>
-              <Grid.Cell columnSpan={{xs: 6, sm: 3, md: 3, lg: 3, xl: 3}}>
-                <StatCard
-                  title="Product Commissions"
-                  value={stats.productCommissions || 0}
-                  subtitle="Individual product rules"
-                  tone="info"
-                />
-              </Grid.Cell>
-              <Grid.Cell columnSpan={{xs: 6, sm: 3, md: 3, lg: 3, xl: 3}}>
-                <StatCard
-                  title="Collection Commissions"
-                  value={stats.collectionCommissions || 0}
-                  subtitle="Collection-wide rules"
-                  tone="success"
-                />
-              </Grid.Cell>
-              <Grid.Cell columnSpan={{xs: 6, sm: 3, md: 3, lg: 3, xl: 3}}>
-                <StatCard
-                  title="Commission Payouts"
-                  value={formatCurrency(stats.totalPotentialEarnings || 0)}
-                  subtitle="Based on current prices"
-                  tone="warning"
-                />
-              </Grid.Cell>
-            </Grid>
-          </div>
-
-          {stats.averageCommission && (
-            <div style={{ marginTop: '16px', padding: '16px', backgroundColor: '#f6f6f7', borderRadius: '8px' }}>
-              <InlineStack gap="400" align="space-between">
-                <Text variant="headingXs" as="h4">Average Commission Rate</Text>
-                <Text fontWeight="semibold">{stats.averageCommission.toFixed(2)}%</Text>
-              </InlineStack>
-              {stats.highestCommission && (
-                <InlineStack gap="400" align="space-between">
-                  <Text>Highest Commission</Text>
-                  <Text>{stats.highestCommission.commission}% ({stats.highestCommission.type})</Text>
-                </InlineStack>
-              )}
+      {/* Stats Overview*/}
+      {!showTable && (
+        <Card>
+          <div style={{ padding: '16px' }}>
+            <InlineStack align="space-between" blockAlign="center">
+              <Text variant="headingMd" as="h3">
+                Commission Overview
+              </Text>
+              <Button onClick={onRefresh}>Refresh</Button>
+            </InlineStack>
+            
+            <div style={{ marginTop: '16px' }}>
+              <Grid>
+                <Grid.Cell columnSpan={{xs: 6, sm: 3, md: 3, lg: 3, xl: 3}}>
+                  <StatCard
+                    title="Total Commissions"
+                    value={stats.totalCommissions || 0}
+                    subtitle="Active commission rules"
+                  />
+                </Grid.Cell>
+                <Grid.Cell columnSpan={{xs: 6, sm: 3, md: 3, lg: 3, xl: 3}}>
+                  <StatCard
+                    title="Products Without Commissions"
+                    value={stats.productsWithoutCommissions || 0}
+                    subtitle="Products needing commission setup"
+                    tone="info"
+                  />
+                </Grid.Cell>
+                <Grid.Cell columnSpan={{xs: 6, sm: 3, md: 3, lg: 3, xl: 3}}>
+                  <StatCard
+                    title="Collection Commissions"
+                    value={stats.collectionCommissions || 0}
+                    subtitle="Collection-wide rules"
+                    tone="success"
+                  />
+                </Grid.Cell>
+                <Grid.Cell columnSpan={{xs: 6, sm: 3, md: 3, lg: 3, xl: 3}}>
+                  <StatCard
+                    title="Commission Payouts"
+                    value={formatCurrency(stats.totalPotentialEarnings || 0)}
+                    subtitle="Based on current prices"
+                    tone="warning"
+                  />
+                </Grid.Cell>
+              </Grid>
             </div>
+
+            {stats.averageCommission && (
+              <div style={{ marginTop: '16px', padding: '16px', backgroundColor: '#f6f6f7', borderRadius: '8px' }}>
+                <InlineStack gap="400" align="space-between">
+                  <Text variant="headingXs" as="h4">Average Commission Rate</Text>
+                  <Text fontWeight="semibold">{stats.averageCommission.toFixed(2)}%</Text>
+                </InlineStack>
+                {stats.highestCommission && (
+                  <InlineStack gap="400" align="space-between">
+                    <Text>Highest Commission</Text>
+                    <Text>{stats.highestCommission.commission}% ({stats.highestCommission.type})</Text>
+                  </InlineStack>
+                )}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {showTable && stats.averageCommission && (
+        <Card sectioned>
+          <InlineStack gap="400" align="space-between">
+            <Text variant="headingXs" as="h4">Average Commission Rate</Text>
+            <Text fontWeight="semibold">{stats.averageCommission.toFixed(2)}%</Text>
+          </InlineStack>
+          {stats.highestCommission && (
+            <InlineStack gap="400" align="space-between">
+              <Text>Highest Commission</Text>
+              <Text>{stats.highestCommission.commission}% ({stats.highestCommission.type})</Text>
+            </InlineStack>
           )}
-        </div>
-      </Card>
+        </Card>
+      )}
 
       {/* Commission Table */}
       {showTable && commissions && commissions.length > 0 && (

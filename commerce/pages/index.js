@@ -268,7 +268,7 @@ export default function Home() {
   }
 
   return (
-    <Page title="Commission Manager">
+    <Page title="Commission Manager" fullWidth>
       <Layout>
         <Layout.Section>
           {error && (
