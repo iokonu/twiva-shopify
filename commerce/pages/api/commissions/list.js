@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { shop } = req.query;
+    const { shop, page = '1', limit = '20' } = req.query;
     
     if (!shop) {
       return res.status(400).json({ error: 'Shop parameter required' });
@@ -24,15 +24,23 @@ export default async function handler(req, res) {
       });
     }
 
-    const productCommissions = await prisma.productCommission.findMany({
-      where: { shopId: shop },
-      orderBy: { createdAt: 'desc' }
-    });
-
-    const collectionCommissions = await prisma.collectionCommission.findMany({
-      where: { shopId: shop },
-      orderBy: { createdAt: 'desc' }
-    });
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+    
+    const [productCommissions, totalCount] = await Promise.all([
+      prisma.productCommission.findMany({
+        where: { shopId: shop },
+        orderBy: { createdAt: 'desc' },
+        skip: skip,
+        take: limitNum
+      }),
+      prisma.productCommission.count({
+        where: { shopId: shop }
+      })
+    ]);
+    
+    const totalPages = Math.ceil(totalCount / limitNum);
 
     const client = new shopify.clients.Graphql({
       session: {
@@ -42,10 +50,8 @@ export default async function handler(req, res) {
     });
 
     const productIds = productCommissions.map(c => c.productId);
-    const collectionIds = collectionCommissions.map(c => c.collectionId);
 
     let products = [];
-    let collections = [];
 
     if (productIds.length > 0) {
       const productQuery = `
@@ -75,67 +81,47 @@ export default async function handler(req, res) {
       products = productResponse.body.data.nodes.filter(node => node);
     }
 
-    if (collectionIds.length > 0) {
-      const collectionQuery = `
-        query getCollectionsByIds($ids: [ID!]!) {
-          nodes(ids: $ids) {
-            ... on Collection {
-              id
-              title
-              productsCount {
-                count
-              }
-            }
-          }
-        }
-      `;
+    // Collections don't have separate records anymore
 
-      const collectionResponse = await client.query({
-        data: {
-          query: collectionQuery,
-          variables: { ids: collectionIds }
-        }
-      });
-
-      collections = collectionResponse.body.data.nodes.filter(node => node);
-    }
-
-    const enrichedCommissions = [
-      ...productCommissions.map(commission => {
-        const product = products.find(p => p.id === commission.productId);
-        return {
-          id: commission.id,
-          type: 'product',
-          commission: commission.commission,
-          productId: commission.productId,
-          productTitle: product?.title || 'Unknown Product',
-          productPrice: product?.priceRangeV2?.minVariantPrice?.amount,
-          currencyCode: product?.priceRangeV2?.minVariantPrice?.currencyCode || 'USD',
-          createdAt: commission.createdAt,
-          updatedAt: commission.updatedAt
-        };
-      }),
-      ...collectionCommissions.map(commission => {
-        const collection = collections.find(c => c.id === commission.collectionId);
-        return {
-          id: commission.id,
-          type: 'collection',
-          commission: commission.commission,
-          collectionId: commission.collectionId,
-          collectionTitle: collection?.title || 'Unknown Collection',
-          productsCount: collection?.productsCount?.count || 0,
-          createdAt: commission.createdAt,
-          updatedAt: commission.updatedAt
-        };
-      })
-    ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const enrichedCommissions = productCommissions.map(commission => {
+      const product = products.find(p => p.id === commission.productId);
+      const price = parseFloat(product?.priceRangeV2?.minVariantPrice?.amount || 0);
+      
+      // Calculate commission amount based on type
+      let commissionAmount = 0;
+      if (commission.commissionType === 'amount') {
+        commissionAmount = commission.commissionValue;
+      } else {
+        commissionAmount = (price * commission.commissionValue) / 100;
+      }
+      
+      return {
+        id: commission.id,
+        type: 'product',
+        commission: commission.commissionValue,
+        commissionType: commission.commissionType,
+        commissionAmount: commissionAmount,
+        productId: commission.productId,
+        productTitle: commission.productTitle || product?.title || 'Unknown Product',
+        productPrice: price,
+        currencyCode: product?.priceRangeV2?.minVariantPrice?.currencyCode || 'KES',
+        createdAt: commission.createdAt,
+        updatedAt: commission.updatedAt
+      };
+    }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     return res.json({
       commissions: enrichedCommissions,
       summary: {
-        totalCommissions: enrichedCommissions.length,
+        totalCommissions: totalCount,
         productCommissions: productCommissions.length,
-        collectionCommissions: collectionCommissions.length
+        collectionCommissions: 0
+      },
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        totalPages: totalPages,
+        totalCount: totalCount
       }
     });
   } catch (error) {

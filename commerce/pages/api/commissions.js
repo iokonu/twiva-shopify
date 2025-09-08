@@ -5,16 +5,18 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     try {
-      const { type, id, commission, applyToProducts } = req.body;
+      const { type, id, commission, commissionType = 'percentage', currency } = req.body;
 
+      const commissionData = { commission, commissionType, currency };
+      
       if (type === 'product') {
-        const result = await setProductCommission(shop, id, commission);
+        const result = await setProductCommission(shop, id, commissionData);
         return res.json(result);
       } else if (type === 'collection') {
-        const result = await setCollectionCommission(shop, id, commission, applyToProducts);
+        const result = await setCollectionCommission(shop, id, commissionData);
         return res.json(result);
       } else if (type === 'category') {
-        const result = await setCategoryCommission(shop, id, commission);
+        const result = await setCategoryCommission(shop, id, commissionData);
         return res.json(result);
       }
 

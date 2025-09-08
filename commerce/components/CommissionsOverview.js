@@ -1,10 +1,10 @@
 import { Card, DataTable, Text, Badge, InlineStack, Grid, Button } from '@shopify/polaris';
 
 export function CommissionsOverview({ stats, commissions, onRefresh, showTable = false }) {
-  const formatCurrency = (amount, currencyCode = 'USD') => {
-    return new Intl.NumberFormat('en-US', {
+  const formatCurrency = (amount, currencyCode = 'KES') => {
+    return new Intl.NumberFormat('en-KE', {
       style: 'currency',
-      currency: currencyCode,
+      currency: 'KES',
     }).format(amount);
   };
 
@@ -20,20 +20,29 @@ export function CommissionsOverview({ stats, commissions, onRefresh, showTable =
     </Card>
   );
 
-  const commissionRows = showTable && commissions ? commissions.map((commission) => [
-    commission.type === 'product' ? commission.productTitle : commission.collectionTitle,
-    <Badge tone={commission.type === 'product' ? 'info' : 'success'}>
-      {commission.type === 'product' ? 'Product' : 'Category'}
-    </Badge>,
-    `${commission.commission}%`,
-    commission.type === 'product' 
-      ? formatCurrency(commission.productPrice || 0, commission.currencyCode)
-      : `${commission.productsCount || 0} products`,
-    commission.type === 'product' && commission.productPrice
-      ? formatCurrency((commission.productPrice * commission.commission) / 100, commission.currencyCode)
-      : 'N/A',
-    commission.createdAt ? new Date(commission.createdAt).toLocaleDateString() : 'N/A',
-  ]) : [];
+  const commissionRows = showTable && commissions ? commissions.map((commission) => {
+    const isPercentage = commission.commissionType === 'percentage';
+    const commissionDisplay = isPercentage 
+      ? `${commission.commission}%`
+      : `${commission.commission}`;
+    
+    const commissionAmount = commission.commissionAmount 
+      ? formatCurrency(commission.commissionAmount, commission.currencyCode)
+      : 'N/A';
+    
+    return [
+      commission.type === 'product' ? commission.productTitle : commission.collectionTitle,
+      <Badge tone={isPercentage ? 'info' : 'warning'}>
+        {isPercentage ? 'Percentage' : 'Amount'}
+      </Badge>,
+      commissionDisplay,
+      commission.type === 'product' 
+        ? formatCurrency(commission.productPrice || 0, commission.currencyCode)
+        : `${commission.productsCount || 0} products`,
+      commissionAmount,
+      commission.createdAt ? new Date(commission.createdAt).toLocaleDateString() : 'N/A',
+    ];
+  }) : [];
 
   return (
     <div>
@@ -52,9 +61,9 @@ export function CommissionsOverview({ stats, commissions, onRefresh, showTable =
               <Grid>
                 <Grid.Cell columnSpan={{xs: 6, sm: 3, md: 3, lg: 3, xl: 3}}>
                   <StatCard
-                    title="Total Commissions"
+                    title="Products with Commissions"
                     value={stats.totalCommissions || 0}
-                    subtitle="Active commission rules"
+                    subtitle="Total number of products with commissions"
                   />
                 </Grid.Cell>
                 <Grid.Cell columnSpan={{xs: 6, sm: 3, md: 3, lg: 3, xl: 3}}>
@@ -75,7 +84,7 @@ export function CommissionsOverview({ stats, commissions, onRefresh, showTable =
                 </Grid.Cell>
                 <Grid.Cell columnSpan={{xs: 6, sm: 3, md: 3, lg: 3, xl: 3}}>
                   <StatCard
-                    title="Commission Payouts"
+                    title="Total Commissions Amount"
                     value={formatCurrency(stats.totalPotentialEarnings || 0)}
                     subtitle="Based on current prices"
                     tone="warning"
@@ -84,16 +93,36 @@ export function CommissionsOverview({ stats, commissions, onRefresh, showTable =
               </Grid>
             </div>
 
-            {stats.averageCommission && (
+            {(stats.percentageCommissionsCount > 0 || stats.fixedAmountCommissionsCount > 0) && (
               <div style={{ marginTop: '16px', padding: '16px', backgroundColor: '#f6f6f7', borderRadius: '8px' }}>
-                <InlineStack gap="400" align="space-between">
-                  <Text variant="headingXs" as="h4">Average Commission Rate</Text>
-                  <Text fontWeight="semibold">{stats.averageCommission.toFixed(2)}%</Text>
-                </InlineStack>
-                {stats.highestCommission && (
+                {stats.percentageCommissionsCount > 0 && (
                   <InlineStack gap="400" align="space-between">
+                    <Text variant="headingXs" as="h4">Average Percentage Commission</Text>
+                    <Text fontWeight="semibold">{stats.averageCommission.toFixed(2)}%</Text>
+                  </InlineStack>
+                )}
+                
+                {/* Commission type breakdown */}
+                <div style={{ marginTop: '8px' }}>
+                  <InlineStack gap="400" align="space-between">
+                    <Text>Percentage-based</Text>
+                    <Text>{stats.percentageCommissionsCount} products</Text>
+                  </InlineStack>
+                  <InlineStack gap="400" align="space-between">
+                    <Text>Fixed amount</Text>
+                    <Text>{stats.fixedAmountCommissionsCount} products</Text>
+                  </InlineStack>
+                </div>
+
+                {stats.highestCommission && (
+                  <InlineStack gap="400" align="space-between" blockAlign="start">
                     <Text>Highest Commission</Text>
-                    <Text>{stats.highestCommission.commission}% ({stats.highestCommission.type})</Text>
+                    <Text>
+                      {stats.highestCommission.commissionType === 'percentage' 
+                        ? `${stats.highestCommission.commission}%` 
+                        : `${formatCurrency(stats.highestCommission.commission)}`
+                      } ({stats.highestCommission.type})
+                    </Text>
                   </InlineStack>
                 )}
               </div>
@@ -102,16 +131,36 @@ export function CommissionsOverview({ stats, commissions, onRefresh, showTable =
         </Card>
       )}
 
-      {showTable && stats.averageCommission && (
+      {showTable && (stats.percentageCommissionsCount > 0 || stats.fixedAmountCommissionsCount > 0) && (
         <Card sectioned>
-          <InlineStack gap="400" align="space-between">
-            <Text variant="headingXs" as="h4">Average Commission Rate</Text>
-            <Text fontWeight="semibold">{stats.averageCommission.toFixed(2)}%</Text>
-          </InlineStack>
+          {stats.percentageCommissionsCount > 0 && (
+            <InlineStack gap="400" align="space-between">
+              <Text variant="headingXs" as="h4">Average Percentage Commission</Text>
+              <Text fontWeight="semibold">{stats.averageCommission.toFixed(2)}%</Text>
+            </InlineStack>
+          )}
+          
+          {/* Commission type breakdown */}
+          <div style={{ marginTop: '8px' }}>
+            <InlineStack gap="400" align="space-between">
+              <Text>Percentage-based</Text>
+              <Text>{stats.percentageCommissionsCount} products</Text>
+            </InlineStack>
+            <InlineStack gap="400" align="space-between">
+              <Text>Fixed amount</Text>
+              <Text>{stats.fixedAmountCommissionsCount} products</Text>
+            </InlineStack>
+          </div>
+
           {stats.highestCommission && (
             <InlineStack gap="400" align="space-between">
               <Text>Highest Commission</Text>
-              <Text>{stats.highestCommission.commission}% ({stats.highestCommission.type})</Text>
+              <Text>
+                {stats.highestCommission.commissionType === 'percentage' 
+                  ? `${stats.highestCommission.commission}%` 
+                  : `${formatCurrency(stats.highestCommission.commission)}`
+                } ({stats.highestCommission.type})
+              </Text>
             </InlineStack>
           )}
         </Card>

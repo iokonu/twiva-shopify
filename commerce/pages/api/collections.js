@@ -51,19 +51,12 @@ export default async function handler(req, res) {
 
     const collections = response.body.data.collections.edges.map(edge => edge.node);
     
-    const collectionCommissions = await prisma.collectionCommission.findMany({
-      where: { shopId: shop },
-    });
-
+    // Collections don't have separate commission records - they're just bulk update tools
     const enrichedCollections = collections.map(collection => {
-      const commission = collectionCommissions.find(c => c.collectionId === collection.id);
       return {
         ...collection,
         productsCount: collection.productsCount?.count || 0,
-        commission: commission ? {
-          commission: commission.commission,
-          id: commission.id,
-        } : null,
+        commission: null, // Collections don't have persistent commissions
       };
     });
 

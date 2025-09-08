@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Card, DataTable, Button, Modal, FormLayout, TextField, InlineStack, Badge, Text, Thumbnail, BlockStack } from '@shopify/polaris';
+import { Card, DataTable, Button, Modal, FormLayout, TextField, InlineStack, Badge, Text, Thumbnail, BlockStack, RadioButton } from '@shopify/polaris';
 
 export function ProductTable({ products, onProductSelect, onSave, onRemove, selectedProduct }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [commission, setCommission] = useState('');
+  const [commissionType, setCommissionType] = useState('percentage');
   const [loading, setLoading] = useState(false);
 
   const formatPrice = (priceRange) => {
@@ -30,10 +31,18 @@ export function ProductTable({ products, onProductSelect, onSave, onRemove, sele
   const calculateCommissionAmount = (product) => {
     if (!product.commission || !product.priceRangeV2) return 'N/A';
     
-    const price = parseFloat(product.priceRangeV2.minVariantPrice.amount);
-    const commissionPercent = product.commission.commission;
-    const commissionAmount = (price * commissionPercent) / 100;
     const currency = product.priceRangeV2.minVariantPrice.currencyCode;
+    let commissionAmount;
+    
+    if (product.commission.commissionType === 'amount') {
+      // For fixed amount, just use the commission value directly
+      commissionAmount = product.commission.commission;
+    } else {
+      // For percentage, calculate as before
+      const price = parseFloat(product.priceRangeV2.minVariantPrice.amount);
+      const commissionPercent = product.commission.commission;
+      commissionAmount = (price * commissionPercent) / 100;
+    }
     
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -44,6 +53,7 @@ export function ProductTable({ products, onProductSelect, onSave, onRemove, sele
   const handleRowClick = (product) => {
     onProductSelect(product);
     setCommission(product.commission?.commission?.toString() || '');
+    setCommissionType(product.commission?.commissionType || 'percentage');
     setModalOpen(true);
   };
 
@@ -52,7 +62,11 @@ export function ProductTable({ products, onProductSelect, onSave, onRemove, sele
     
     setLoading(true);
     try {
-      await onSave(selectedProduct.id, parseFloat(commission));
+      await onSave(selectedProduct.id, {
+        commission: parseFloat(commission),
+        commissionType,
+        currency: 'KES'
+      });
       setModalOpen(false);
       setCommission('');
     } finally {
@@ -95,10 +109,13 @@ export function ProductTable({ products, onProductSelect, onSave, onRemove, sele
     product.commission ? (
       <InlineStack gap="200">
         <Badge tone={product.commission.source === 'product' ? 'success' : 'info'}>
-          {product.commission.commission}%
+          {product.commission.commissionType === 'percentage' 
+            ? `${product.commission.commission}%` 
+            : product.commission.commission
+          }
         </Badge>
         <Text tone="subdued">
-          ({product.commission.source === 'product' ? 'Product' : 'Collection'})
+          ({product.commission.commissionType === 'percentage' ? 'Percentage' : 'Amount'})
         </Text>
       </InlineStack>
     ) : (
@@ -179,17 +196,38 @@ export function ProductTable({ products, onProductSelect, onSave, onRemove, sele
       >
         <Modal.Section>
           <FormLayout>
+            <Text variant="headingXs" as="h4">Commission Type</Text>
+            <BlockStack gap="200">
+              <RadioButton
+                label="Percentage (%)"
+                checked={commissionType === 'percentage'}
+                id="percentage-product"
+                name="productCommissionType"
+                onChange={() => setCommissionType('percentage')}
+              />
+              <RadioButton
+                label="Fixed Amount (KES)"
+                checked={commissionType === 'amount'}
+                id="amount-product"
+                name="productCommissionType"
+                onChange={() => setCommissionType('amount')}
+              />
+            </BlockStack>
+            
             <TextField
-              label="Commission (%)"
+              label={commissionType === 'percentage' ? 'Commission Percentage (%)' : 'Commission Amount (KES)'}
               type="number"
               value={commission}
               onChange={setCommission}
-              placeholder="e.g., 10.5"
+              placeholder={commissionType === 'percentage' ? 'e.g., 10.5' : 'e.g., 1500'}
               helpText={
                 selectedProduct?.commission?.source === 'collection'
-                  ? `Currently using collection rule: ${selectedProduct.commission.commission}%`
-                  : 'Set commission percentage for this product'
+                  ? `Currently using collection rule: ${selectedProduct.commission.commission}${selectedProduct.commission.commissionType === 'percentage' ? '%' : ' KES'}`
+                  : commissionType === 'percentage' 
+                    ? 'Set commission percentage for this product'
+                    : 'Set fixed commission amount in KES'
               }
+              step={commissionType === 'percentage' ? '0.1' : '1'}
             />
             
             {selectedProduct && (
@@ -201,13 +239,17 @@ export function ProductTable({ products, onProductSelect, onSave, onRemove, sele
                 </InlineStack>
                 {commission && !isNaN(commission) && (
                   <InlineStack gap="400" align="space-between">
-                    <Text>Commission ({commission}%):</Text>
+                    <Text>Commission ({commissionType === 'percentage' ? `${commission}%` : `KES ${commission}`}):</Text>
                     <Text fontWeight="semibold" tone="success">
                       {selectedProduct.priceRangeV2 ? 
-                        new Intl.NumberFormat('en-US', {
+                        new Intl.NumberFormat('en-KE', {
                           style: 'currency',
-                          currency: selectedProduct.priceRangeV2.minVariantPrice.currencyCode,
-                        }).format((parseFloat(selectedProduct.priceRangeV2.minVariantPrice.amount) * parseFloat(commission)) / 100)
+                          currency: 'KES',
+                        }).format(
+                          commissionType === 'percentage'
+                            ? (parseFloat(selectedProduct.priceRangeV2.minVariantPrice.amount) * parseFloat(commission)) / 100
+                            : parseFloat(commission)
+                        )
                         : 'N/A'
                       }
                     </Text>

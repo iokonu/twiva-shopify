@@ -56,8 +56,7 @@ export default async function handler(req, res) {
     const enrichedProducts = await Promise.all(
       products.map(async (product) => {
         const productLink = `https://${shopRecord.domain}/products/${product.handle}`;
-        const collectionIds = product.collections.edges.map(edge => edge.node.id);
-        const commissionData = await getProductCommission(shop, product.id, collectionIds);
+        const commissionData = await getProductCommission(shop, product.id);
         
         return {
           ...product,

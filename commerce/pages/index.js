@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
-import { Page, Layout, Card, Tabs, Spinner, Banner, BlockStack, TextField, InlineStack } from '@shopify/polaris';
+import { Page, Layout, Card, Tabs, Spinner, Banner, BlockStack, TextField, InlineStack, Pagination } from '@shopify/polaris';
 import { useAppBridge } from '@shopify/app-bridge-react';
 import { Redirect } from '@shopify/app-bridge/actions';
 import { ProductTable } from '../components/ProductTable';
@@ -22,6 +22,12 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [pagination, setPagination] = useState({
+    products: { hasNext: false, hasPrevious: false, cursor: null },
+    collections: { hasNext: false, hasPrevious: false, cursor: null },
+    categories: { hasNext: false, hasPrevious: false, cursor: null },
+    commissions: { page: 1, totalPages: 1, limit: 20 }
+  });
   
   const { shop, host } = router.query;
 
@@ -109,6 +115,14 @@ export default function Home() {
         }
         const data = await response.json();
         setProducts(data.products);
+        setPagination(prev => ({
+          ...prev,
+          products: {
+            hasNext: data.pageInfo?.hasNextPage || false,
+            hasPrevious: data.pageInfo?.hasPreviousPage || false,
+            cursor: data.pageInfo?.endCursor || null
+          }
+        }));
       } else if (selectedTab === 2) {
         const response = await fetch(`/api/collections?shop=${shop}${searchParam}`);
         if (response.status === 401) {
@@ -133,9 +147,22 @@ export default function Home() {
         }
         const data = await response.json();
         setCollections(data.collections);
+        setPagination(prev => ({
+          ...prev,
+          collections: {
+            hasNext: data.pageInfo?.hasNextPage || false,
+            hasPrevious: data.pageInfo?.hasPreviousPage || false,
+            cursor: data.pageInfo?.endCursor || null
+          }
+        }));
       } else if (selectedTab === 3) {
-        const response = await fetch(`/api/categories?shop=${shop}${searchParam}`);
-        if (response.status === 401) {
+        // Load both categories and commissions for the Categories tab
+        const [categoriesResponse, commissionsResponse] = await Promise.all([
+          fetch(`/api/categories?shop=${shop}${searchParam}`),
+          fetch(`/api/commissions/list?shop=${shop}`)
+        ]);
+
+        if (categoriesResponse.status === 401 || commissionsResponse.status === 401) {
           try {
             const authResponse = await fetch(`/api/auth?shop=${shop}&host=${host}`, {
               headers: { 'Accept': 'application/json' }
@@ -151,12 +178,22 @@ export default function Home() {
           }
           return;
         }
-        if (!response.ok) {
-          const errorData = await response.json();
+
+        if (!categoriesResponse.ok) {
+          const errorData = await categoriesResponse.json();
           throw new Error(errorData.error || 'Failed to load categories');
         }
-        const data = await response.json();
-        setCategories(data.categories);
+
+        if (!commissionsResponse.ok) {
+          const errorData = await commissionsResponse.json();
+          throw new Error(errorData.error || 'Failed to load commissions');
+        }
+
+        const categoriesData = await categoriesResponse.json();
+        const commissionsData = await commissionsResponse.json();
+        
+        setCategories(categoriesData.categories);
+        setCommissions(commissionsData.commissions);
       } else if (selectedTab === 4) {
         const response = await fetch(`/api/commissions/list?shop=${shop}`);
         if (response.status === 401) {
@@ -181,6 +218,14 @@ export default function Home() {
         }
         const data = await response.json();
         setCommissions(data.commissions);
+        setPagination(prev => ({
+          ...prev,
+          commissions: {
+            page: data.pagination?.page || 1,
+            totalPages: data.pagination?.totalPages || 1,
+            limit: data.pagination?.limit || 20
+          }
+        }));
       }
     } catch (err) {
       setError(err.message);
@@ -189,12 +234,12 @@ export default function Home() {
     }
   };
 
-  const handleSaveProductCommission = async (productId, commission) => {
+  const handleSaveProductCommission = async (productId, commissionData) => {
     try {
       const response = await fetch(`/api/commissions?shop=${shop}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'product', id: productId, commission }),
+        body: JSON.stringify({ type: 'product', id: productId, ...commissionData }),
       });
       
       if (!response.ok) throw new Error('Failed to save commission');
@@ -205,7 +250,7 @@ export default function Home() {
     }
   };
 
-  const handleSaveCategoryCommission = async (categoryId, commission, applyToProducts = false, type = 'collection') => {
+  const handleSaveCategoryCommission = async (categoryId, commissionData, applyToProducts = false, type = 'collection') => {
     try {
       const response = await fetch(`/api/commissions?shop=${shop}`, {
         method: 'POST',
@@ -213,7 +258,7 @@ export default function Home() {
         body: JSON.stringify({ 
           type: type === 'category' ? 'category' : 'collection', 
           id: categoryId, 
-          commission, 
+          ...commissionData,
           applyToProducts 
         }),
       });
@@ -239,6 +284,88 @@ export default function Home() {
       await loadData();
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const handleNextPage = (listType) => {
+    if (listType === 'products' && pagination.products.hasNext) {
+      loadDataWithCursor('products', pagination.products.cursor, 'next');
+    } else if (listType === 'collections' && pagination.collections.hasNext) {
+      loadDataWithCursor('collections', pagination.collections.cursor, 'next');
+    } else if (listType === 'commissions' && pagination.commissions.page < pagination.commissions.totalPages) {
+      loadDataWithPage('commissions', pagination.commissions.page + 1);
+    }
+  };
+
+  const handlePrevPage = (listType) => {
+    if (listType === 'products' && pagination.products.hasPrevious) {
+      loadDataWithCursor('products', null, 'prev');
+    } else if (listType === 'collections' && pagination.collections.hasPrevious) {
+      loadDataWithCursor('collections', null, 'prev');
+    } else if (listType === 'commissions' && pagination.commissions.page > 1) {
+      loadDataWithPage('commissions', pagination.commissions.page - 1);
+    }
+  };
+
+  const loadDataWithCursor = async (type, cursor, direction) => {
+    setLoading(true);
+    try {
+      const searchParam = debouncedSearchTerm ? `&search=${encodeURIComponent(debouncedSearchTerm)}` : '';
+      const cursorParam = cursor ? `&${direction === 'next' ? 'after' : 'before'}=${cursor}` : '';
+      
+      const response = await fetch(`/api/${type}?shop=${shop}${searchParam}${cursorParam}`);
+      if (!response.ok) throw new Error(`Failed to load ${type}`);
+      
+      const data = await response.json();
+      
+      if (type === 'products') {
+        setProducts(data.products);
+        setPagination(prev => ({
+          ...prev,
+          products: {
+            hasNext: data.pageInfo?.hasNextPage || false,
+            hasPrevious: data.pageInfo?.hasPreviousPage || false,
+            cursor: data.pageInfo?.endCursor || null
+          }
+        }));
+      } else if (type === 'collections') {
+        setCollections(data.collections);
+        setPagination(prev => ({
+          ...prev,
+          collections: {
+            hasNext: data.pageInfo?.hasNextPage || false,
+            hasPrevious: data.pageInfo?.hasPreviousPage || false,
+            cursor: data.pageInfo?.endCursor || null
+          }
+        }));
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadDataWithPage = async (type, page) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/commissions/list?shop=${shop}&page=${page}&limit=${pagination.commissions.limit}`);
+      if (!response.ok) throw new Error('Failed to load commissions');
+      
+      const data = await response.json();
+      setCommissions(data.commissions);
+      setPagination(prev => ({
+        ...prev,
+        commissions: {
+          page: data.pagination?.page || page,
+          totalPages: data.pagination?.totalPages || 1,
+          limit: data.pagination?.limit || 20
+        }
+      }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -311,24 +438,49 @@ export default function Home() {
                     )}
                     
                     {selectedTab === 1 && (
-                      <ProductTable
-                        products={products}
-                        onProductSelect={setSelectedProduct}
-                        onSave={handleSaveProductCommission}
-                        onRemove={handleRemoveCommission}
-                        selectedProduct={selectedProduct}
-                      />
+                      <BlockStack gap="400">
+                        <ProductTable
+                          products={products}
+                          onProductSelect={setSelectedProduct}
+                          onSave={handleSaveProductCommission}
+                          onRemove={handleRemoveCommission}
+                          selectedProduct={selectedProduct}
+                        />
+                        {(pagination.products.hasNext || pagination.products.hasPrevious) && (
+                          <div style={{ display: 'flex', justifyContent: 'center', padding: '16px' }}>
+                            <Pagination
+                              hasPrevious={pagination.products.hasPrevious}
+                              onPrevious={() => handlePrevPage('products')}
+                              hasNext={pagination.products.hasNext}
+                              onNext={() => handleNextPage('products')}
+                            />
+                          </div>
+                        )}
+                      </BlockStack>
                     )}
                     
-                    {selectedTab === 2 &&
-                      collections.map((collection) => (
-                        <CategoryCommissionForm
-                          key={collection.id}
-                          category={collection}
-                          onSave={handleSaveCategoryCommission}
-                          onRemove={handleRemoveCommission}
-                        />
-                      ))}
+                    {selectedTab === 2 && (
+                      <BlockStack gap="400">
+                        {collections.map((collection) => (
+                          <CategoryCommissionForm
+                            key={collection.id}
+                            category={collection}
+                            onSave={handleSaveCategoryCommission}
+                            onRemove={handleRemoveCommission}
+                          />
+                        ))}
+                        {(pagination.collections.hasNext || pagination.collections.hasPrevious) && (
+                          <div style={{ display: 'flex', justifyContent: 'center', padding: '16px' }}>
+                            <Pagination
+                              hasPrevious={pagination.collections.hasPrevious}
+                              onPrevious={() => handlePrevPage('collections')}
+                              hasNext={pagination.collections.hasNext}
+                              onNext={() => handleNextPage('collections')}
+                            />
+                          </div>
+                        )}
+                      </BlockStack>
+                    )}
 
                     {selectedTab === 3 &&
                       categories.map((category) => (
@@ -336,16 +488,30 @@ export default function Home() {
                           key={category.name}
                           category={category}
                           onSave={handleSaveCategoryCommission}
+                          appliedCommissions={commissions}
                         />
                       ))}
                       
                     {selectedTab === 4 && (
-                      <CommissionsOverview
-                        stats={stats}
-                        commissions={commissions}
-                        onRefresh={loadData}
-                        showTable={true}
-                      />
+                      <BlockStack gap="400">
+                        <CommissionsOverview
+                          stats={stats}
+                          commissions={commissions}
+                          onRefresh={loadData}
+                          showTable={true}
+                        />
+                        {pagination.commissions.totalPages > 1 && (
+                          <div style={{ display: 'flex', justifyContent: 'center', padding: '16px' }}>
+                            <Pagination
+                              hasPrevious={pagination.commissions.page > 1}
+                              onPrevious={() => handlePrevPage('commissions')}
+                              hasNext={pagination.commissions.page < pagination.commissions.totalPages}
+                              onNext={() => handleNextPage('commissions')}
+                              label={`Page ${pagination.commissions.page} of ${pagination.commissions.totalPages}`}
+                            />
+                          </div>
+                        )}
+                      </BlockStack>
                     )}
                   </BlockStack>
                 )}
