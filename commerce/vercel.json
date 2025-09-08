@@ -4,14 +4,5 @@
     "pages/api/**/*.js": {
       "maxDuration": 30
     }
-  },
-  "env": {
-    "DATABASE_URL": "@database_url",
-    "DIRECT_URL": "@direct_url",
-    "SHOPIFY_API_KEY": "@shopify_api_key",
-    "SHOPIFY_API_SECRET": "@shopify_api_secret",
-    "SHOPIFY_SCOPES": "@shopify_scopes",
-    "SHOPIFY_APP_URL": "@shopify_app_url",
-    "NEXT_PUBLIC_SHOPIFY_API_KEY": "@next_public_shopify_api_key"
   }
 }
