@@ -1,6 +1,6 @@
 import { prisma } from './prisma';
 
-export async function getProductCommission(shopId, productId, collectionIds = []) {
+export async function getProductCommission(shopId, productId) {
   const productCommission = await prisma.productCommission.findUnique({
     where: {
       shopId_productId: {
@@ -12,39 +12,17 @@ export async function getProductCommission(shopId, productId, collectionIds = []
 
   if (productCommission) {
     return {
-      commission: productCommission.commission,
+      commission: productCommission.commissionValue,
+      commissionType: productCommission.commissionType,
       source: 'product',
       id: productCommission.id,
     };
   }
 
-  if (collectionIds.length > 0) {
-    const collectionCommission = await prisma.collectionCommission.findFirst({
-      where: {
-        shopId,
-        collectionId: {
-          in: collectionIds,
-        },
-      },
-      orderBy: {
-        updatedAt: 'desc',
-      },
-    });
-
-    if (collectionCommission) {
-      return {
-        commission: collectionCommission.commission,
-        source: 'collection',
-        id: collectionCommission.id,
-        collectionId: collectionCommission.collectionId,
-      };
-    }
-  }
-
   return null;
 }
 
-export async function setProductCommission(shopId, productId, commission, productDetails = null) {
+export async function setProductCommission(shopId, productId, commissionData, productDetails = null) {
   // If product details aren't provided, we need to fetch them from Shopify
   let productTitle = 'Unknown Product';
   let productHandle = '';
@@ -98,6 +76,11 @@ export async function setProductCommission(shopId, productId, commission, produc
     productLink = productDetails.link;
   }
 
+  // Handle both old format (number) and new format (object)
+  const commission = typeof commissionData === 'number' ? commissionData : commissionData.commission;
+  const commissionType = typeof commissionData === 'object' ? commissionData.commissionType : 'percentage';
+  const currency = typeof commissionData === 'object' ? commissionData.currency : null;
+
   return await prisma.productCommission.upsert({
     where: {
       shopId_productId: {
@@ -106,7 +89,8 @@ export async function setProductCommission(shopId, productId, commission, produc
       },
     },
     update: {
-      commission,
+      commissionValue: commission,
+      commissionType,
       productTitle,
       productHandle,
       productLink,
@@ -115,7 +99,8 @@ export async function setProductCommission(shopId, productId, commission, produc
     create: {
       shopId,
       productId,
-      commission,
+      commissionValue: commission,
+      commissionType,
       productTitle,
       productHandle,
       productLink,
@@ -123,89 +108,72 @@ export async function setProductCommission(shopId, productId, commission, produc
   });
 }
 
-export async function setCollectionCommission(shopId, collectionId, commission, applyToProducts = false, collectionDetails = null) {
-  // Get collection details if not provided
-  let collectionTitle = 'Unknown Collection';
-  let collectionHandle = '';
+export async function setCollectionCommission(shopId, collectionId, commissionData) {
+  // For collections, we just bulk apply to all products in that collection
+  await applyCollectionCommissionToProducts(shopId, collectionId, commissionData);
   
-  if (!collectionDetails) {
-    const shopRecord = await prisma.shop.findUnique({
-      where: { id: shopId }
-    });
-
-    if (shopRecord?.accessToken && shopRecord.accessToken !== 'temp_token') {
-      try {
-        const { default: shopify } = await import('./shopify.js');
-        const client = new shopify.clients.Graphql({
-          session: {
-            shop: shopRecord.domain,
-            accessToken: shopRecord.accessToken,
-          },
-        });
-
-        const collectionQuery = `
-          query getCollection($id: ID!) {
-            collection(id: $id) {
-              id
-              title
-              handle
-            }
-          }
-        `;
-
-        const response = await client.query({
-          data: {
-            query: collectionQuery,
-            variables: { id: collectionId }
-          }
-        });
-
-        const collection = response.body.data.collection;
-        if (collection) {
-          collectionTitle = collection.title;
-          collectionHandle = collection.handle || '';
-        }
-      } catch (error) {
-        console.error('Error fetching collection details:', error);
-      }
-    }
-  } else {
-    collectionTitle = collectionDetails.title;
-    collectionHandle = collectionDetails.handle || '';
-  }
-
-  // First, set the collection commission
-  const collectionCommissionResult = await prisma.collectionCommission.upsert({
-    where: {
-      shopId_collectionId: {
-        shopId,
-        collectionId,
-      },
-    },
-    update: {
-      commission,
-      collectionTitle,
-      collectionHandle,
-      updatedAt: new Date(),
-    },
-    create: {
-      shopId,
-      collectionId,
-      commission,
-      collectionTitle,
-      collectionHandle,
-    },
+  const shopRecord = await prisma.shop.findUnique({
+    where: { id: shopId }
   });
 
-  // If applyToProducts is true, also apply to all products in the collection
-  if (applyToProducts) {
-    await applyCollectionCommissionToProducts(shopId, collectionId, commission);
+  let collectionTitle = 'Unknown Collection';
+  let productsCount = 0;
+  
+  if (shopRecord?.accessToken && shopRecord.accessToken !== 'temp_token') {
+    try {
+      const { default: shopify } = await import('./shopify.js');
+      const client = new shopify.clients.Graphql({
+        session: {
+          shop: shopRecord.domain,
+          accessToken: shopRecord.accessToken,
+        },
+      });
+
+      const collectionQuery = `
+        query getCollection($id: ID!) {
+          collection(id: $id) {
+            id
+            title
+            handle
+            products(first: 100) {
+              edges {
+                node {
+                  id
+                }
+              }
+            }
+          }
+        }
+      `;
+
+      const response = await client.query({
+        data: {
+          query: collectionQuery,
+          variables: { id: collectionId }
+        }
+      });
+
+      const collection = response.body.data.collection;
+      if (collection) {
+        collectionTitle = collection.title;
+        productsCount = collection.products.edges.length;
+      }
+    } catch (error) {
+      console.error('Error fetching collection details:', error);
+    }
   }
 
-  return collectionCommissionResult;
+  const commission = typeof commissionData === 'number' ? commissionData : commissionData.commission;
+  const commissionType = typeof commissionData === 'object' ? commissionData.commissionType : 'percentage';
+  const commissionDisplay = commissionType === 'percentage' ? `${commission}%` : `KES ${commission}`;
+  
+  return { 
+    message: `Applied ${commissionDisplay} commission to ${productsCount} products in collection "${collectionTitle}"`,
+    updatedProducts: productsCount 
+  };
 }
 
-export async function setCategoryCommission(shopId, categoryName, commission) {
+export async function setCategoryCommission(shopId, categoryName, commissionData) {
   // For categories, we just bulk apply to all products with that category
   // No separate category commission table needed
   
@@ -267,17 +235,21 @@ export async function setCategoryCommission(shopId, categoryName, commission) {
         handle: product.handle,
         link: `https://${shopRecord.domain}/products/${product.handle}`
       };
-      return setProductCommission(shopId, product.id, commission, productDetails);
+      return setProductCommission(shopId, product.id, commissionData, productDetails);
     }));
   }
 
+  const commission = typeof commissionData === 'number' ? commissionData : commissionData.commission;
+  const commissionType = typeof commissionData === 'object' ? commissionData.commissionType : 'percentage';
+  const commissionDisplay = commissionType === 'percentage' ? `${commission}%` : `KES ${commission}`;
+  
   return { 
-    message: `Applied ${commission}% commission to ${categoryProducts.length} products in category "${categoryName}"`,
+    message: `Applied ${commissionDisplay} commission to ${categoryProducts.length} products in category "${categoryName}"`,
     updatedProducts: categoryProducts.length 
   };
 }
 
-async function applyCollectionCommissionToProducts(shopId, collectionId, commission) {
+async function applyCollectionCommissionToProducts(shopId, collectionId, commissionData) {
   // We need to fetch products from Shopify API and then update their commissions
   // This is a bit complex as we need the shop's access token and Shopify client
   const shopRecord = await prisma.shop.findUnique({
@@ -337,7 +309,7 @@ async function applyCollectionCommissionToProducts(shopId, collectionId, commiss
           handle: product.handle,
           link: `https://${shopRecord.domain}/products/${product.handle}`
         };
-        return setProductCommission(shopId, product.id, commission, productDetails);
+        return setProductCommission(shopId, product.id, commissionData, productDetails);
       }));
     }
 
@@ -353,9 +325,6 @@ export async function removeCommission(shopId, type, id) {
     return await prisma.productCommission.delete({
       where: { id },
     });
-  } else if (type === 'collection') {
-    return await prisma.collectionCommission.delete({
-      where: { id },
-    });
   }
+  // Collections don't have separate records to delete since they're just bulk updates
 }

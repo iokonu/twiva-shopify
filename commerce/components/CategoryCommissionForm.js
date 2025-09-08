@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { Card, FormLayout, TextField, Button, BlockStack, InlineStack, Badge, Text, Thumbnail } from '@shopify/polaris';
+import { Card, FormLayout, TextField, Button, BlockStack, InlineStack, Badge, Text, Thumbnail, RadioButton } from '@shopify/polaris';
 
 export function CategoryCommissionForm({ category, onSave, onRemove }) {
   const [commission, setCommission] = useState(
     category.commission?.commission?.toString() || ''
+  );
+  const [commissionType, setCommissionType] = useState(
+    category.commission?.commissionType || 'percentage'
   );
   const [loading, setLoading] = useState(false);
 
@@ -12,7 +15,11 @@ export function CategoryCommissionForm({ category, onSave, onRemove }) {
     
     setLoading(true);
     try {
-      await onSave(category.id, parseFloat(commission), true);
+      await onSave(category.id, {
+        commission: parseFloat(commission),
+        commissionType,
+        currency: 'KES'
+      }, true);
     } finally {
       setLoading(false);
     }
@@ -60,13 +67,35 @@ export function CategoryCommissionForm({ category, onSave, onRemove }) {
           </InlineStack>
           
           <FormLayout>
+            <Text variant="headingXs" as="h4">Commission Type</Text>
+            <BlockStack gap="200">
+              <RadioButton
+                label="Percentage (%)"
+                checked={commissionType === 'percentage'}
+                id="percentage-collection"
+                name="collectionCommissionType"
+                onChange={() => setCommissionType('percentage')}
+              />
+              <RadioButton
+                label="Fixed Amount (KES)"
+                checked={commissionType === 'fixed'}
+                id="fixed-collection"
+                name="collectionCommissionType"
+                onChange={() => setCommissionType('fixed')}
+              />
+            </BlockStack>
+            
             <TextField
-              label="Collection Commission (%)"
+              label={commissionType === 'percentage' ? 'Collection Commission (%)' : 'Collection Commission (KES)'}
               type="number"
               value={commission}
               onChange={setCommission}
-              placeholder="e.g., 15.0"
-              helpText="This commission will apply to all products in this collection"
+              placeholder={commissionType === 'percentage' ? 'e.g., 15.0' : 'e.g., 1500'}
+              helpText={commissionType === 'percentage' 
+                ? 'This commission percentage will apply to all products in this collection'
+                : 'This fixed commission amount (KES) will apply to all products in this collection'
+              }
+              step={commissionType === 'percentage' ? '0.1' : '1'}
             />
             
             <InlineStack gap="200">

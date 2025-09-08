@@ -25,17 +25,11 @@ export default async function handler(req, res) {
       });
     }
 
-    // Get all commission data
-    const [productCommissions, collectionCommissions] = await Promise.all([
-      prisma.productCommission.findMany({
-        where: { shopId: shop },
-        orderBy: { createdAt: 'desc' }
-      }),
-      prisma.collectionCommission.findMany({
-        where: { shopId: shop },
-        orderBy: { createdAt: 'desc' }
-      })
-    ]);
+    // Get all commission data (only product commissions now)
+    const productCommissions = await prisma.productCommission.findMany({
+      where: { shopId: shop },
+      orderBy: { createdAt: 'desc' }
+    });
 
     // Create GraphQL client to fetch additional data
     const client = new shopify.clients.Graphql({
@@ -46,8 +40,9 @@ export default async function handler(req, res) {
     });
 
     let totalPotentialEarnings = 0;
-    let totalCommissions = productCommissions.length + collectionCommissions.length;
-    let allCommissionRates = [];
+    let totalCommissions = productCommissions.length;
+    let percentageCommissions = [];
+    let fixedAmountCommissions = [];
     let productsWithCommissions = 0;
     let totalProducts = 0;
 
@@ -99,11 +94,24 @@ export default async function handler(req, res) {
         productCommissions.forEach(commission => {
           const product = allProducts.find(p => p.id === commission.productId);
           if (product && product.priceRangeV2) {
-            const price = parseFloat(product.priceRangeV2.minVariantPrice.amount);
-            const commissionAmount = (price * commission.commission) / 100;
+            let commissionAmount;
+            if (commission.commissionType === 'amount') {
+              // For fixed amount, use the commission value directly
+              commissionAmount = commission.commissionValue;
+            } else {
+              // For percentage, calculate as before
+              const price = parseFloat(product.priceRangeV2.minVariantPrice.amount);
+              commissionAmount = (price * commission.commissionValue) / 100;
+            }
             totalPotentialEarnings += commissionAmount;
           }
-          allCommissionRates.push(commission.commission);
+          
+          // Separate percentage and fixed amount commissions
+          if (commission.commissionType === 'percentage') {
+            percentageCommissions.push(commission.commissionValue);
+          } else {
+            fixedAmountCommissions.push(commission.commissionValue);
+          }
         });
         
         productsWithCommissions = productCommissions.length;
@@ -112,27 +120,39 @@ export default async function handler(req, res) {
       console.error('Error fetching product data:', error);
     }
 
-    // Add collection commission rates to average calculation
-    collectionCommissions.forEach(commission => {
-      allCommissionRates.push(commission.commission);
-    });
+    // Collections/categories don't have separate records anymore
 
-    // Calculate average commission
-    const averageCommission = allCommissionRates.length > 0 
-      ? allCommissionRates.reduce((sum, rate) => sum + rate, 0) / allCommissionRates.length
+    // Calculate average commission (only for percentage commissions)
+    const averageCommission = percentageCommissions.length > 0 
+      ? percentageCommissions.reduce((sum, rate) => sum + rate, 0) / percentageCommissions.length
       : 0;
 
-    // Find highest commission
+    // Find highest commission (separate for percentage and fixed amount)
     let highestCommission = null;
-    if (allCommissionRates.length > 0) {
-      const maxRate = Math.max(...allCommissionRates);
-      const productWithMax = productCommissions.find(c => c.commission === maxRate);
-      const collectionWithMax = collectionCommissions.find(c => c.commission === maxRate);
-      
+    
+    if (percentageCommissions.length > 0) {
+      const maxPercentageRate = Math.max(...percentageCommissions);
       highestCommission = {
-        commission: maxRate,
-        type: productWithMax ? 'Product' : 'Category'
+        commission: maxPercentageRate,
+        type: 'Product',
+        commissionType: 'percentage'
       };
+    }
+    
+    // If we also have fixed amount commissions and want to show the highest overall
+    if (fixedAmountCommissions.length > 0) {
+      const maxFixedAmount = Math.max(...fixedAmountCommissions);
+      
+      // If we don't have any percentage commissions, or if we want to show fixed amount as highest
+      if (!highestCommission) {
+        highestCommission = {
+          commission: maxFixedAmount,
+          type: 'Product',
+          commissionType: 'amount'
+        };
+      }
+      // You could add logic here to compare which is actually "higher" 
+      // by converting fixed amounts to equivalent percentages based on product prices
     }
 
     const productsWithoutCommissions = totalProducts - productsWithCommissions;
@@ -141,10 +161,12 @@ export default async function handler(req, res) {
       totalCommissions,
       productCommissions: productCommissions.length,
       productsWithoutCommissions,
-      collectionCommissions: collectionCommissions.length,
+      collectionCommissions: 0,
       totalPotentialEarnings,
       averageCommission,
       highestCommission,
+      percentageCommissionsCount: percentageCommissions.length,
+      fixedAmountCommissionsCount: fixedAmountCommissions.length,
       summary: {
         hasCommissions: totalCommissions > 0,
         lastUpdated: new Date().toISOString()

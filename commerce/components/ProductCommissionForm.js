@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { Card, FormLayout, TextField, Button, BlockStack, InlineStack, Badge, Text, Thumbnail } from '@shopify/polaris';
+import { Card, FormLayout, TextField, Button, BlockStack, InlineStack, Badge, Text, Thumbnail, RadioButton } from '@shopify/polaris';
 
 export function ProductCommissionForm({ product, onSave, onRemove }) {
   const [commission, setCommission] = useState(
     product.commission?.commission?.toString() || ''
+  );
+  const [commissionType, setCommissionType] = useState(
+    product.commission?.commissionType || 'percentage'
   );
   const [loading, setLoading] = useState(false);
 
@@ -15,9 +18,9 @@ export function ProductCommissionForm({ product, onSave, onRemove }) {
     const currency = priceRange.minVariantPrice.currencyCode;
     
     const formatCurrency = (amount) => {
-      return new Intl.NumberFormat('en-US', {
+      return new Intl.NumberFormat('en-KE', {
         style: 'currency',
-        currency: currency,
+        currency: 'KES',
       }).format(amount);
     };
     
@@ -33,7 +36,11 @@ export function ProductCommissionForm({ product, onSave, onRemove }) {
     
     setLoading(true);
     try {
-      await onSave(product.id, parseFloat(commission));
+      await onSave(product.id, {
+        commission: parseFloat(commission),
+        commissionType,
+        currency: 'KES'
+      });
     } finally {
       setLoading(false);
     }
@@ -81,17 +88,38 @@ export function ProductCommissionForm({ product, onSave, onRemove }) {
           </InlineStack>
           
           <FormLayout>
+            <Text variant="headingXs" as="h4">Commission Type</Text>
+            <BlockStack gap="200">
+              <RadioButton
+                label="Percentage (%)"
+                checked={commissionType === 'percentage'}
+                id="percentage"
+                name="commissionType"
+                onChange={() => setCommissionType('percentage')}
+              />
+              <RadioButton
+                label="Fixed Amount (KES)"
+                checked={commissionType === 'fixed'}
+                id="fixed"
+                name="commissionType"
+                onChange={() => setCommissionType('fixed')}
+              />
+            </BlockStack>
+            
             <TextField
-              label="Commission (%)"
+              label={commissionType === 'percentage' ? 'Commission Percentage (%)' : 'Commission Amount (KES)'}
               type="number"
               value={commission}
               onChange={setCommission}
-              placeholder="e.g., 10.5"
+              placeholder={commissionType === 'percentage' ? 'e.g., 10.5' : 'e.g., 1500'}
               helpText={
                 product.commission?.source === 'collection'
-                  ? `Currently using collection rule: ${product.commission.commission}%`
-                  : 'Set commission percentage for this product'
+                  ? `Currently using collection rule: ${product.commission.commission}${product.commission.commissionType === 'percentage' ? '%' : ' KES'}`
+                  : commissionType === 'percentage' 
+                    ? 'Set commission percentage for this product'
+                    : 'Set fixed commission amount in KES'
               }
+              step={commissionType === 'percentage' ? '0.1' : '1'}
             />
             
             <InlineStack gap="200">
