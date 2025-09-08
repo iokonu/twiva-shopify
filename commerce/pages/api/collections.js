@@ -59,6 +59,7 @@ export default async function handler(req, res) {
       const commission = collectionCommissions.find(c => c.collectionId === collection.id);
       return {
         ...collection,
+        productsCount: collection.productsCount?.count || 0,
         commission: commission ? {
           commission: commission.commission,
           id: commission.id,

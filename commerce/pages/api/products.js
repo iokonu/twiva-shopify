@@ -52,13 +52,16 @@ export default async function handler(req, res) {
 
     const products = response.body.data.products.edges.map(edge => edge.node);
     
+    // Only enrich with commission data, don't save all products to database
     const enrichedProducts = await Promise.all(
       products.map(async (product) => {
+        const productLink = `https://${shopRecord.domain}/products/${product.handle}`;
         const collectionIds = product.collections.edges.map(edge => edge.node.id);
         const commissionData = await getProductCommission(shop, product.id, collectionIds);
         
         return {
           ...product,
+          link: productLink,
           commission: commissionData,
         };
       })
