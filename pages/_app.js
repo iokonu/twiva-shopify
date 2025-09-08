@@ -1,11 +1,14 @@
 import { AppProvider } from '@shopify/polaris';
 import { Provider as AppBridgeProvider } from '@shopify/app-bridge-react';
+import { useRouter } from 'next/router';
 import '@shopify/polaris/build/esm/styles.css';
 
 function MyApp({ Component, pageProps }) {
+  const router = useRouter();
+  
   const config = {
     apiKey: process.env.NEXT_PUBLIC_SHOPIFY_API_KEY,
-    host: pageProps.host,
+    host: router.query.host || pageProps.host,
     forceRedirect: true,
   };
 
