@@ -1,18 +1,18 @@
 [application]
 name = "Commission Manager"
-client_id = "your_api_key"
-application_url = "https://your-app.ngrok.io"
+client_id = "569e49e45bacbe4d8bc015d75300b96c"
+application_url = "https://1c201aa997c4.ngrok-free.app"
 embedded = true
 
 [application.pos]
 embedded = false
 
 [access_scopes]
-scopes = "read_products,write_products,read_collections"
+scopes = "read_products,write_products"
 
 [auth]
 redirect_urls = [
-  "https://your-app.ngrok.io/api/auth/callback"
+  "https://1c201aa997c4.ngrok-free.app/api/auth/callback"
 ]
 
 [webhooks]

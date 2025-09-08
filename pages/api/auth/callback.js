@@ -1,4 +1,4 @@
-import { prisma } from '../../../lib/prisma';
+import { supabase } from '../../../lib/supabase';
 import crypto from 'crypto';
 
 export default async function handler(req, res) {
@@ -42,17 +42,30 @@ export default async function handler(req, res) {
 
     const tokenData = await tokenResponse.json();
     
-    await prisma.shop.upsert({
-      where: { id: shop },
-      update: {
-        accessToken: tokenData.access_token,
-      },
-      create: {
-        id: shop,
-        domain: shop,
-        accessToken: tokenData.access_token,
-      },
-    });
+    // Try to update existing shop first
+    const { data: existingShop } = await supabase
+      .from('shops')
+      .select('id')
+      .eq('id', shop)
+      .single();
+
+    if (existingShop) {
+      await supabase
+        .from('shops')
+        .update({
+          accessToken: tokenData.access_token,
+          updatedAt: new Date().toISOString(),
+        })
+        .eq('id', shop);
+    } else {
+      await supabase
+        .from('shops')
+        .insert({
+          id: shop,
+          domain: shop,
+          accessToken: tokenData.access_token,
+        });
+    }
 
     const redirectUrl = `/?shop=${shop}&host=${host || ''}`;
     res.writeHead(302, { Location: redirectUrl });

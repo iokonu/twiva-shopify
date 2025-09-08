@@ -1,4 +1,4 @@
-import { prisma } from '../../../lib/prisma';
+import { supabase } from '../../../lib/supabase';
 import shopify from '../../../lib/shopify';
 
 export default async function handler(req, res) {
@@ -13,11 +13,13 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Shop parameter required' });
     }
 
-    const shopRecord = await prisma.shop.findUnique({
-      where: { id: shop }
-    });
+    const { data: shopRecord, error: shopError } = await supabase
+      .from('shops')
+      .select('*')
+      .eq('id', shop)
+      .single();
 
-    if (!shopRecord || !shopRecord.accessToken || shopRecord.accessToken === 'temp_token') {
+    if (shopError || !shopRecord || !shopRecord.accessToken || shopRecord.accessToken === 'temp_token') {
       return res.status(401).json({ 
         error: 'Shopify authentication required',
         authUrl: `/api/auth?shop=${shop}` 
@@ -28,17 +30,23 @@ export default async function handler(req, res) {
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
     
-    const [productCommissions, totalCount] = await Promise.all([
-      prisma.productCommission.findMany({
-        where: { shopId: shop },
-        orderBy: { createdAt: 'desc' },
-        skip: skip,
-        take: limitNum
-      }),
-      prisma.productCommission.count({
-        where: { shopId: shop }
-      })
-    ]);
+    // Get total count first
+    const { count: totalCount } = await supabase
+      .from('product_commissions')
+      .select('*', { count: 'exact', head: true })
+      .eq('shopId', shop);
+
+    // Get paginated product commissions
+    const { data: productCommissions, error: commissionsError } = await supabase
+      .from('product_commissions')
+      .select('*')
+      .eq('shopId', shop)
+      .order('createdAt', { ascending: false })
+      .range(skip, skip + limitNum - 1);
+
+    if (commissionsError) {
+      throw commissionsError;
+    }
     
     const totalPages = Math.ceil(totalCount / limitNum);
 

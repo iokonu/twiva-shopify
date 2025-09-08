@@ -10,7 +10,13 @@ import { CommissionsOverview } from '../components/CommissionsOverview';
 
 export default function Home() {
   const router = useRouter();
-  const app = useAppBridge();
+  let app;
+  try {
+    app = useAppBridge();
+  } catch (error) {
+    // AppBridge not available (no host parameter)
+    app = null;
+  }
   const [selectedTab, setSelectedTab] = useState(0);
   const [products, setProducts] = useState([]);
   const [collections, setCollections] = useState([]);
@@ -76,8 +82,12 @@ export default function Home() {
             });
             const { authUrl } = await authResponse.json();
             
-            const redirect = Redirect.create(app);
-            redirect.dispatch(Redirect.Action.REMOTE, authUrl);
+            if (app) {
+              const redirect = Redirect.create(app);
+              redirect.dispatch(Redirect.Action.REMOTE, authUrl);
+            } else {
+              window.location.href = authUrl;
+            }
             return;
           } catch (authError) {
             console.error('Auth redirect error:', authError);
@@ -100,8 +110,12 @@ export default function Home() {
             });
             const { authUrl } = await authResponse.json();
             
-            const redirect = Redirect.create(app);
-            redirect.dispatch(Redirect.Action.REMOTE, authUrl);
+            if (app) {
+              const redirect = Redirect.create(app);
+              redirect.dispatch(Redirect.Action.REMOTE, authUrl);
+            } else {
+              window.location.href = authUrl;
+            }
             return;
           } catch (authError) {
             console.error('Auth redirect error:', authError);
@@ -132,8 +146,12 @@ export default function Home() {
             });
             const { authUrl } = await authResponse.json();
             
-            const redirect = Redirect.create(app);
-            redirect.dispatch(Redirect.Action.REMOTE, authUrl);
+            if (app) {
+              const redirect = Redirect.create(app);
+              redirect.dispatch(Redirect.Action.REMOTE, authUrl);
+            } else {
+              window.location.href = authUrl;
+            }
             return;
           } catch (authError) {
             console.error('Auth redirect error:', authError);
@@ -169,8 +187,12 @@ export default function Home() {
             });
             const { authUrl } = await authResponse.json();
             
-            const redirect = Redirect.create(app);
-            redirect.dispatch(Redirect.Action.REMOTE, authUrl);
+            if (app) {
+              const redirect = Redirect.create(app);
+              redirect.dispatch(Redirect.Action.REMOTE, authUrl);
+            } else {
+              window.location.href = authUrl;
+            }
             return;
           } catch (authError) {
             console.error('Auth redirect error:', authError);
@@ -203,8 +225,12 @@ export default function Home() {
             });
             const { authUrl } = await authResponse.json();
             
-            const redirect = Redirect.create(app);
-            redirect.dispatch(Redirect.Action.REMOTE, authUrl);
+            if (app) {
+              const redirect = Redirect.create(app);
+              redirect.dispatch(Redirect.Action.REMOTE, authUrl);
+            } else {
+              window.location.href = authUrl;
+            }
             return;
           } catch (authError) {
             console.error('Auth redirect error:', authError);

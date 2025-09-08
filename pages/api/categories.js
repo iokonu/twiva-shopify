@@ -1,5 +1,5 @@
 import shopify from '../../lib/shopify';
-import { prisma } from '../../lib/prisma';
+import { supabase } from '../../lib/supabase';
 import { PRODUCTS_QUERY } from '../../lib/graphql';
 
 export default async function handler(req, res) {
@@ -14,15 +14,28 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Shop parameter required' });
     }
 
-    const shopRecord = await prisma.shop.upsert({
-      where: { id: shop },
-      update: {},
-      create: {
-        id: shop,
-        domain: shop,
-        accessToken: 'temp_token',
-      },
-    });
+    // Try to get existing shop first
+    let { data: shopRecord } = await supabase
+      .from('shops')
+      .select('*')
+      .eq('id', shop)
+      .single();
+
+    // If no shop exists, create one
+    if (!shopRecord) {
+      const { data: newShop, error } = await supabase
+        .from('shops')
+        .insert({
+          id: shop,
+          domain: shop,
+          accessToken: 'temp_token',
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      shopRecord = newShop;
+    }
 
     if (!shopRecord.accessToken || shopRecord.accessToken === 'temp_token') {
       return res.status(401).json({ 
